@@ -37,7 +37,8 @@ loss = criterion(output, target_mask)
 print('Loss:', loss.item())
 loss = criterion_sum(output.reshape(2,-1), target_mask.reshape(2,-1))
 print('Loss:', loss.item())
-
+# loss = BCEcriterion(sig(output.reshape(2,-1)), target_mask.reshape(2,-1))
+# print('BCELoss:', loss.item())
 # 反向传播和优化
 loss.backward()
 optimizer.step()

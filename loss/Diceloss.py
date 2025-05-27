@@ -3,6 +3,27 @@ from torchmetrics import Dice
 import torch.nn as nn
 import numpy as np
 
+# def dice_coeff(pred, target):
+#     smooth = 1.
+#     num = pred.size(0)
+#     m1 = pred.view(num, -1)  # Flatten
+#     m2 = target.view(num, -1)  # Flatten
+#     intersection = (m1 * m2).sum()
+#
+#     return (2. * intersection + smooth) / (m1.sum() + m2.sum() + smooth)
+#
+# def dice_loss(pred, target):
+#     # pred = pred > 0.5
+#     # target = target > 0.5
+#     eps = 1e-6
+#     num = pred.size(0)
+#     m1 = pred.view(num, -1)  # Flatten
+#     m2 = target.view(num, -1)  # Flatten
+#     intersection = (m1 * m2).sum()
+#
+#     return 1 - (2. * intersection ) / (m1.sum() + m2.sum() + eps)
+
+
 class BCELoss(nn.Module):
     def __init__(self):
         super(BCELoss, self).__init__()

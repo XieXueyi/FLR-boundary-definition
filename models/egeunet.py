@@ -1,10 +1,9 @@
-import torch
-from torch import nn
-import torch.nn.functional as F
-# from einops import rearrange
-
-from timm.models.layers import trunc_normal_
 import math
+import torch
+import torch.nn.functional as F
+from timm.models.layers import trunc_normal_
+from torch import nn
+from torchsummary import summary
 
 
 class DepthWiseConv2d(nn.Module):
@@ -45,6 +44,7 @@ class LayerNorm(nn.Module):
     
 
 class group_aggregation_bridge(nn.Module):
+
     def __init__(self, dim_xh, dim_xl, k_size=3, d_list=[1,2,5,7]):
         super().__init__()
         self.pre_project = nn.Conv2d(dim_xh, dim_xl, 1)
@@ -77,6 +77,7 @@ class group_aggregation_bridge(nn.Module):
             LayerNorm(normalized_shape=dim_xl * 2 + 4, data_format='channels_first'),
             nn.Conv2d(dim_xl * 2 + 4, dim_xl, 1)
         )
+
     def forward(self, xh, xl, mask):
         xh = self.pre_project(xh)
         xh = F.interpolate(xh, size=[xl.size(2), xl.size(3)], mode ='bilinear', align_corners=True)
@@ -96,8 +97,8 @@ class Grouped_multi_axis_Hadamard_Product_Attention(nn.Module):
         super().__init__()
         
         c_dim_in = dim_in//4
-        k_size=3
-        pad=(k_size-1) // 2
+        k_size = 3
+        pad = (k_size-1) // 2
         
         self.params_xy = nn.Parameter(torch.Tensor(1, c_dim_in, x, y), requires_grad=True)
         nn.init.ones_(self.params_xy)
@@ -155,7 +156,7 @@ class Grouped_multi_axis_Hadamard_Product_Attention(nn.Module):
 
 class EGEUNet(nn.Module):
     
-    def __init__(self, num_classes=1, input_channels=3, c_list=[8,16,24,32,48,64], bridge=True, gt_ds=True):
+    def __init__(self, num_classes=1, input_channels=3, c_list=[8, 16, 24, 32, 48, 64], bridge=True, gt_ds=True):
         super().__init__()
 
         self.bridge = bridge
@@ -265,7 +266,8 @@ class EGEUNet(nn.Module):
             gt_pre5 = self.gt_conv1(out5)
             t5 = self.GAB5(t6, t5, gt_pre5)
             gt_pre5 = F.interpolate(gt_pre5, scale_factor=32, mode ='bilinear', align_corners=True)
-        else: t5 = self.GAB5(t6, t5)
+        else:
+            t5 = self.GAB5(t6, t5)
         out5 = torch.add(out5, t5) # b, c4, H/32, W/32
         
         out4 = F.gelu(F.interpolate(self.dbn2(self.decoder2(out5)),scale_factor=(2,2),mode ='bilinear',align_corners=True)) # b, c3, H/16, W/16
@@ -273,7 +275,8 @@ class EGEUNet(nn.Module):
             gt_pre4 = self.gt_conv2(out4)
             t4 = self.GAB4(t5, t4, gt_pre4)
             gt_pre4 = F.interpolate(gt_pre4, scale_factor=16, mode ='bilinear', align_corners=True)
-        else:t4 = self.GAB4(t5, t4)
+        else:
+            t4 = self.GAB4(t5, t4)
         out4 = torch.add(out4, t4) # b, c3, H/16, W/16
         
         out3 = F.gelu(F.interpolate(self.dbn3(self.decoder3(out4)),scale_factor=(2,2),mode ='bilinear',align_corners=True)) # b, c2, H/8, W/8
@@ -281,7 +284,8 @@ class EGEUNet(nn.Module):
             gt_pre3 = self.gt_conv3(out3)
             t3 = self.GAB3(t4, t3, gt_pre3)
             gt_pre3 = F.interpolate(gt_pre3, scale_factor=8, mode ='bilinear', align_corners=True)
-        else: t3 = self.GAB3(t4, t3)
+        else:
+            t3 = self.GAB3(t4, t3)
         out3 = torch.add(out3, t3) # b, c2, H/8, W/8
         
         out2 = F.gelu(F.interpolate(self.dbn4(self.decoder4(out3)),scale_factor=(2,2),mode ='bilinear',align_corners=True)) # b, c1, H/4, W/4
@@ -289,7 +293,8 @@ class EGEUNet(nn.Module):
             gt_pre2 = self.gt_conv4(out2)
             t2 = self.GAB2(t3, t2, gt_pre2)
             gt_pre2 = F.interpolate(gt_pre2, scale_factor=4, mode ='bilinear', align_corners=True)
-        else: t2 = self.GAB2(t3, t2)
+        else:
+            t2 = self.GAB2(t3, t2)
         out2 = torch.add(out2, t2) # b, c1, H/4, W/4 
         
         out1 = F.gelu(F.interpolate(self.dbn5(self.decoder5(out2)),scale_factor=(2,2),mode ='bilinear',align_corners=True)) # b, c0, H/2, W/2
@@ -297,21 +302,22 @@ class EGEUNet(nn.Module):
             gt_pre1 = self.gt_conv5(out1)
             t1 = self.GAB1(t2, t1, gt_pre1)
             gt_pre1 = F.interpolate(gt_pre1, scale_factor=2, mode ='bilinear', align_corners=True)
-        else: t1 = self.GAB1(t2, t1)
+        else:
+            t1 = self.GAB1(t2, t1)
         out1 = torch.add(out1, t1) # b, c0, H/2, W/2
         
-        out0 = F.interpolate(self.final(out1),scale_factor=(2,2),mode ='bilinear',align_corners=True) # b, num_class, H, W
+        out0 = F.interpolate(self.final(out1),scale_factor=(2, 2), mode ='bilinear', align_corners=True) # b, num_class, H, W
         
         if self.gt_ds:
             return (torch.sigmoid(gt_pre5), torch.sigmoid(gt_pre4), torch.sigmoid(gt_pre3), torch.sigmoid(gt_pre2), torch.sigmoid(gt_pre1)), out0
         else:
             return torch.sigmoid(out0)
 
+
 if __name__ == "__main__":
-    from torchsummary import summary
+
     tensor_rand = torch.rand(1, 3, 512, 512).to('cuda')
     mid_channels = [16, 32, 64, 128, 256]
-    # model = UNet(in_channels=3, out_channels=1).to('cuda')
     model = EGEUNet(gt_ds=True).to('cuda')
-    gt_pre, out = model(tensor_rand)  # 前向传播
-    print(out.shape)  # 输出张量的形状
+    gt_pre, out = model(tensor_rand)
+    print(out.shape)
